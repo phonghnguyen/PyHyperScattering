@@ -9,7 +9,7 @@ import warnings
 import json
 #from pyFAI import azimuthalIntegrator
 import numpy as np
-
+from dask_image.imread import imread
 
 class SST1RSoXSLoader(FileLoader):
     '''
@@ -21,7 +21,7 @@ class SST1RSoXSLoader(FileLoader):
     pix_size_1 = 0.06
     pix_size_2 = 0.06
 
-    def __init__(self,corr_mode=None,user_corr_func=None,dark_pedestal=100,exposure_offset=0,constant_md={},):
+    def __init__(self,corr_mode=None,user_corr_func=None,dark_pedestal=100,exposure_offset=0,constant_md={},use_chunked_loading=False):
         '''
         Args:
             corr_mode (str): origin to use for the intensity correction.  Can be 'expt','i0','expt+i0','user_func','old',or 'none'
@@ -29,6 +29,7 @@ class SST1RSoXSLoader(FileLoader):
             dark_pedestal (numeric): value to subtract(/add, if negative) to the whole image.  this should match the instrument setting for suitcased tiffs, typically 100.
             exposure_offset (numeric): value to add to the exposure time.  Measured at 2ms with the piezo shutter in Dec 2019 by Jacob Thelen, NIST
             constant_md (dict): values to insert into every metadata load. 
+            use_chunked_loading (bool): flag to use chunked loading with dask or not.
         '''
 
         if corr_mode == None:
@@ -38,13 +39,13 @@ class SST1RSoXSLoader(FileLoader):
         else:
             self.corr_mode = corr_mode
 
-
         self.constant_md = constant_md
-
         self.dark_pedestal = dark_pedestal
         self.user_corr_func = user_corr_func
         self.exposure_offset = exposure_offset
+        self.use_chunked_loading = use_chunked_loading
         # self.darks = {}
+        
     # def loadFileSeries(self,basepath):
     #     try:
     #         flist = list(basepath.glob('*primary*.tiff'))
@@ -59,8 +60,6 @@ class SST1RSoXSLoader(FileLoader):
     #         out = xr.concat(out,single_img)
     #
     #     return out
-
-
 
     def loadSingleImage(self,filepath,coords=None, return_q=False,image_slice=None,use_cached_md=False,**kwargs):
         '''
@@ -80,7 +79,14 @@ class SST1RSoXSLoader(FileLoader):
             raise NotImplementedError('Image slicing is not supported for SST1')
         if use_cached_md != False:
             raise NotImplementedError('Caching of metadata is not supported for SST1')
-        img = Image.open(filepath)
+   
+        # Use chunked loading if flag is set
+        if self.use_chunked_loading:
+            img = imread(str(filepath))
+            if img.ndim == 3:
+                img = img[:, :, 0]  # Select the first channel if the image is multi-channel
+        else:
+            img = np.array(Image.open(filepath))
 
         headerdict = self.loadMd(filepath)
         # two steps in this pre-processing stage:
@@ -112,7 +118,8 @@ class SST1RSoXSLoader(FileLoader):
 
         # # step 2: dark subtraction
         # this is already done in the suitcase, but we offer the option to add/subtract a pedestal.
-        image_data = (np.array(img)-self.dark_pedestal)/corr
+        image_data = (img-self.dark_pedestal)/corr
+        image_data = img
         if return_q:
             qpx = 2*np.pi*60e-6/(headerdict['sdd']/1000)/(headerdict['wavelength']*1e10)
             qx = (np.arange(1,img.size[0]+1)-headerdict['beamcenter_y'])*qpx
