@@ -30,6 +30,7 @@ class SST1RSoXSLoader(FileLoader):
             dark_pedestal (numeric): value to subtract(/add, if negative) to the whole image.  this should match the instrument setting for suitcased tiffs, typically 100.
             exposure_offset (numeric): value to add to the exposure time.  Measured at 2ms with the piezo shutter in Dec 2019 by Jacob Thelen, NIST
             constant_md (dict): values to insert into every metadata load. 
+            use_chunked_loading (bool): flag to use chunked loading with dask or not.
         '''
 
         if corr_mode == None:
