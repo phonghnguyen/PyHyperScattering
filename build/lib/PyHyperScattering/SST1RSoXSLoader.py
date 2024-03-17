@@ -30,7 +30,7 @@ class SST1RSoXSLoader(FileLoader):
             dark_pedestal (numeric): value to subtract(/add, if negative) to the whole image.  this should match the instrument setting for suitcased tiffs, typically 100.
             exposure_offset (numeric): value to add to the exposure time.  Measured at 2ms with the piezo shutter in Dec 2019 by Jacob Thelen, NIST
             constant_md (dict): values to insert into every metadata load. 
-            use_chunked_loading (boolean): if True, uses chunked loading which is more memory efficient but slower in terms of processing
+            use_chunked_loading (bool): flag to use chunked loading with dask or not.
         '''
 
         if corr_mode == None:
@@ -40,14 +40,13 @@ class SST1RSoXSLoader(FileLoader):
         else:
             self.corr_mode = corr_mode
 
-
         self.constant_md = constant_md
-
         self.dark_pedestal = dark_pedestal
         self.user_corr_func = user_corr_func
         self.exposure_offset = exposure_offset
         self.use_chunked_loading = use_chunked_loading
         # self.darks = {}
+        
     # def loadFileSeries(self,basepath):
     #     try:
     #         flist = list(basepath.glob('*primary*.tiff'))
@@ -62,8 +61,6 @@ class SST1RSoXSLoader(FileLoader):
     #         out = xr.concat(out,single_img)
     #
     #     return out
-
-
 
     def loadSingleImage(self,filepath,coords=None, return_q=False,image_slice=None,use_cached_md=False,**kwargs):
         '''
@@ -97,7 +94,6 @@ class SST1RSoXSLoader(FileLoader):
             headerdict.update(coords)
 
         #step 1: correction term
-
         if self.corr_mode == 'expt':
             corr = headerdict['exposure'] #(headerdict['AI 3 Izero']*expt)
         elif self.corr_mode == 'i0':
@@ -115,7 +111,6 @@ class SST1RSoXSLoader(FileLoader):
         if(corr<0):
             warnings.warn(f'Correction value is negative: {corr} with headers {headerdict}.',stacklevel=2)
             corr = abs(corr)
-
 
         # # step 2: dark subtraction
         # this is already done in the suitcase, but we offer the option to add/subtract a pedestal.
@@ -246,7 +241,6 @@ class SST1RSoXSLoader(FileLoader):
         primary_dict['polarization'] = df_primary['en_polarization_setpoint'][seq_num]
 
         return primary_dict
-
 
     def loadMd(self,filepath):
         # get sequence number of image for primary csv

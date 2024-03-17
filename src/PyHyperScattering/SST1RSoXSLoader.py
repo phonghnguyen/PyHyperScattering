@@ -9,7 +9,11 @@ import warnings
 import json
 #from pyFAI import azimuthalIntegrator
 import numpy as np
-import dask.array as da
+try:
+    import dask.array as da
+except ImportError:
+    print('Could not import Dask.  Chunked loading may not work.  Install Dask or pyhyperscattering[performance] if this is desired.')
+
 
 
 class SST1RSoXSLoader(FileLoader):
@@ -30,7 +34,6 @@ class SST1RSoXSLoader(FileLoader):
             dark_pedestal (numeric): value to subtract(/add, if negative) to the whole image.  this should match the instrument setting for suitcased tiffs, typically 100.
             exposure_offset (numeric): value to add to the exposure time.  Measured at 2ms with the piezo shutter in Dec 2019 by Jacob Thelen, NIST
             constant_md (dict): values to insert into every metadata load. 
-            use_chunked_loading (bool): flag to use chunked loading with dask or not.
         '''
 
         if corr_mode == None:
@@ -40,13 +43,14 @@ class SST1RSoXSLoader(FileLoader):
         else:
             self.corr_mode = corr_mode
 
+
         self.constant_md = constant_md
+
         self.dark_pedestal = dark_pedestal
         self.user_corr_func = user_corr_func
         self.exposure_offset = exposure_offset
         self.use_chunked_loading = use_chunked_loading
         # self.darks = {}
-        
     # def loadFileSeries(self,basepath):
     #     try:
     #         flist = list(basepath.glob('*primary*.tiff'))
@@ -61,6 +65,8 @@ class SST1RSoXSLoader(FileLoader):
     #         out = xr.concat(out,single_img)
     #
     #     return out
+
+
 
     def loadSingleImage(self,filepath,coords=None, return_q=False,image_slice=None,use_cached_md=False,**kwargs):
         '''
@@ -94,6 +100,7 @@ class SST1RSoXSLoader(FileLoader):
             headerdict.update(coords)
 
         #step 1: correction term
+
         if self.corr_mode == 'expt':
             corr = headerdict['exposure'] #(headerdict['AI 3 Izero']*expt)
         elif self.corr_mode == 'i0':
@@ -112,13 +119,14 @@ class SST1RSoXSLoader(FileLoader):
             warnings.warn(f'Correction value is negative: {corr} with headers {headerdict}.',stacklevel=2)
             corr = abs(corr)
 
+
         # # step 2: dark subtraction
         # this is already done in the suitcase, but we offer the option to add/subtract a pedestal.
         image_data = (img-self.dark_pedestal)/corr
         if return_q:
             qpx = 2*np.pi*60e-6/(headerdict['sdd']/1000)/(headerdict['wavelength']*1e10)
-            qx = (np.arange(1,img.size[0]+1)-headerdict['beamcenter_y'])*qpx
-            qy = (np.arange(1,img.size[1]+1)-headerdict['beamcenter_x'])*qpx
+            qx = (np.arange(1,img.shape[1]+1)-headerdict['beamcenter_y'])*qpx
+            qy = (np.arange(1,img.shape[0]+1)-headerdict['beamcenter_x'])*qpx
             # now, match up the dims and coords
             return xr.DataArray(image_data,dims=['qy','qx'],coords={'qy':qy,'qx':qx},attrs=headerdict)
         else:
@@ -241,6 +249,7 @@ class SST1RSoXSLoader(FileLoader):
         primary_dict['polarization'] = df_primary['en_polarization_setpoint'][seq_num]
 
         return primary_dict
+
 
     def loadMd(self,filepath):
         # get sequence number of image for primary csv
